@@ -147,6 +147,26 @@ CREATE TABLE modelos_ml (
     auc_roc DECIMAL(5,4)
 );
 
+-- 12. TABLA: dataset_entrenamiento (dataset histórico para entrenamiento IA)
+CREATE TABLE dataset_entrenamiento (
+    id_registro SERIAL PRIMARY KEY,
+    equipo VARCHAR(50) NOT NULL,
+    timestamp TIMESTAMP NOT NULL,
+    temperatura_motor DECIMAL(10,2) NOT NULL,
+    presion_aceite DECIMAL(10,2) NOT NULL,
+    rpm_motor DECIMAL(10,2) NOT NULL,
+    vibracion DECIMAL(10,2) NOT NULL,
+    temperatura_transmision DECIMAL(10,2) NOT NULL,
+    horas_operacion INTEGER NOT NULL,
+    carga_operativa DECIMAL(10,2) NOT NULL,
+    corriente DECIMAL(10,2) NOT NULL,
+    flujo_hidraulico DECIMAL(10,2) NOT NULL,
+    presion_neumaticos DECIMAL(10,2) NOT NULL,
+    indice_desgaste DECIMAL(10,4) NOT NULL,
+    eficiencia DECIMAL(10,2) NOT NULL,
+    falla_inminente INTEGER NOT NULL DEFAULT 0
+);
+
 -- Índices para optimización
 CREATE INDEX idx_lecturas_sensor ON lecturas_sensores(id_sensor);
 CREATE INDEX idx_lecturas_equipo ON lecturas_sensores(id_equipo);
@@ -155,6 +175,8 @@ CREATE INDEX idx_predicciones_equipo ON predicciones(id_equipo);
 CREATE INDEX idx_mantenimientos_equipo ON mantenimientos(id_equipo);
 CREATE INDEX idx_bitacora_usuario ON bitacora_acceso(id_usuario);
 CREATE INDEX idx_bitacora_timestamp ON bitacora_acceso(timestamp);
+CREATE INDEX idx_dataset_equipo ON dataset_entrenamiento(equipo);
+CREATE INDEX idx_dataset_timestamp ON dataset_entrenamiento(timestamp);
 
 -- Comentarios de documentación
 COMMENT ON TABLE roles IS 'Catálogo de roles del sistema (Admin, Ingeniero, Operador, Analista)';
@@ -168,3 +190,4 @@ COMMENT ON TABLE mantenimientos IS 'Registro de mantenimientos realizados';
 COMMENT ON TABLE predicciones IS 'Predicciones generadas por el motor de IA';
 COMMENT ON TABLE bitacora_acceso IS 'Bitácora de auditoría de accesos';
 COMMENT ON TABLE modelos_ml IS 'Metadatos de modelos de ML entrenados';
+COMMENT ON TABLE dataset_entrenamiento IS 'Dataset histórico multivariable para entrenamiento de modelos predictivos';

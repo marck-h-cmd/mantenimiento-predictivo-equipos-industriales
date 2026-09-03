@@ -115,6 +115,10 @@ class IAEngine:
         """Entrena modelo Random Forest con optimización opcional."""
         st.info("🌲 Entrenando Random Forest...")
 
+        if len(np.unique(y_train)) < 2:
+            st.warning("⚠️ Random Forest omitido: se requiere más de una clase en entrenamiento.")
+            return None
+
         if optimize:
             param_grid = {
                 'n_estimators': [100, 200, 300],
@@ -166,6 +170,10 @@ class IAEngine:
 
         st.info("⚡ Entrenando XGBoost...")
 
+        if len(np.unique(y_train)) < 2:
+            st.warning("⚠️ XGBoost omitido: se requiere más de una clase en entrenamiento.")
+            return None
+
         if optimize:
             param_grid = {
                 'n_estimators': [100, 200, 300],
@@ -213,6 +221,10 @@ class IAEngine:
                   optimize=False, cv_strategy='stratified'):
         """Entrena modelo SVM con optimización opcional."""
         st.info("🎯 Entrenando SVM...")
+
+        if len(np.unique(y_train)) < 2:
+            st.warning("⚠️ SVM omitido: se requiere más de una clase en entrenamiento.")
+            return None
 
         if optimize:
             param_grid = {
@@ -768,17 +780,20 @@ def render_ia_engine():
     else:
         try:
             df = db.query_to_dataframe("""
-                SELECT e.codigo_equipo as equipo, ls.timestamp, ls.valor,
-                       s.tipo_sensor, m.falla_inminente
-                FROM lecturas_sensores ls
-                JOIN sensores s ON ls.id_sensor = s.id_sensor
-                JOIN equipos e ON ls.id_equipo = e.id_equipo
-                LEFT JOIN mantenimientos m ON e.id_equipo = m.id_equipo
+                SELECT equipo, timestamp, temperatura_motor, presion_aceite, rpm_motor, vibracion,
+                       temperatura_transmision, horas_operacion, carga_operativa, corriente,
+                       flujo_hidraulico, presion_neumaticos, indice_desgaste, eficiencia,
+                       falla_inminente
+                FROM dataset_entrenamiento
+                ORDER BY timestamp ASC
             """)
-            st.success("Datos cargados desde PostgreSQL")
+            if df is None or len(df) == 0:
+                raise ValueError("La tabla dataset_entrenamiento no contiene registros en PostgreSQL.")
+            st.success(f"✅ Datos cargados exitosamente desde PostgreSQL ({len(df):,} registros)")
         except Exception as e:
             st.error(f"Error al cargar desde BD: {e}")
             df = generate_synthetic_sensor_data(n_samples=3000)
+            st.info("🔄 Usando datos de demostración como respaldo")
 
     st.write(f"Dataset: {len(df):,} registros, {len(df.columns)} variables")
 
@@ -807,15 +822,19 @@ def render_ia_engine():
         status.text("Preprocesando datos...")
         X, y = engine.preprocess_data(df, fit_scaler=True)
 
-        # División temporal preservando orden
-        split_idx = int(len(X) * (1 - test_size / 100))
-        X_train, X_test = X[:split_idx], X[split_idx:]
-        y_train, y_test = y[:split_idx], y[split_idx:]
+        # Verificar presencia de al menos 2 clases
+        unique_classes = np.unique(y)
+        if len(unique_classes) < 2:
+            st.error(f"El dataset contiene una sola clase ({unique_classes}). Se requieren tanto datos normales como de falla.")
+            return
 
-        # División adicional para validación (85/15 del train)
-        val_split = int(len(X_train) * 0.85)
-        X_tr, X_val = X_train[:val_split], X_train[val_split:]
-        y_tr, y_val = y_train[:val_split], y_train[val_split:]
+        # División estratificada para garantizar presencia de fallas en train, val y test
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size / 100, random_state=RANDOM_STATE, stratify=y
+        )
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X_train, y_train, test_size=0.15, random_state=RANDOM_STATE, stratify=y_train
+        )
 
         progress_bar.progress(10)
 
@@ -840,12 +859,20 @@ def render_ia_engine():
         # Entrenar modelos híbridos
         if train_hybrid and TF_AVAILABLE:
             X_seq, y_seq = engine.preprocess_data(df, fit_scaler=True, for_deep_learning=True)
-            split_idx_seq = int(len(X_seq) * (1 - test_size / 100))
-            X_tr_seq, X_test_seq = X_seq[:split_idx_seq], X_seq[split_idx_seq:]
-            y_tr_seq, y_test_seq = y_seq[:split_idx_seq], y_seq[split_idx_seq:]
-            val_split_seq = int(len(X_tr_seq) * 0.85)
-            X_tr_s, X_val_s = X_tr_seq[:val_split_seq], X_tr_seq[val_split_seq:]
-            y_tr_s, y_val_s = y_tr_seq[:val_split_seq], y_tr_seq[val_split_seq:]
+            if len(np.unique(y_seq)) >= 2:
+                X_tr_seq, X_test_seq, y_tr_seq, y_test_seq = train_test_split(
+                    X_seq, y_seq, test_size=test_size / 100, random_state=RANDOM_STATE, stratify=y_seq
+                )
+                X_tr_s, X_val_s, y_tr_s, y_val_s = train_test_split(
+                    X_tr_seq, y_tr_seq, test_size=0.15, random_state=RANDOM_STATE, stratify=y_tr_seq
+                )
+            else:
+                split_idx_seq = int(len(X_seq) * (1 - test_size / 100))
+                X_tr_seq, X_test_seq = X_seq[:split_idx_seq], X_seq[split_idx_seq:]
+                y_tr_seq, y_test_seq = y_seq[:split_idx_seq], y_seq[split_idx_seq:]
+                val_split_seq = int(len(X_tr_seq) * 0.85)
+                X_tr_s, X_val_s = X_tr_seq[:val_split_seq], X_tr_seq[val_split_seq:]
+                y_tr_s, y_val_s = y_tr_seq[:val_split_seq], y_tr_seq[val_split_seq:]
 
             status.text("Entrenando CNN-LSTM...")
             engine.train_cnn_lstm(X_tr_s, y_tr_s, X_val_s, y_val_s)
