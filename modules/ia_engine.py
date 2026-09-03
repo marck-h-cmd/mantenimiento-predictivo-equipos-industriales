@@ -402,8 +402,12 @@ class IAEngine:
 
             # Balancear con SMOTE si es necesario (solo para tradicionales)
             if model_name in ['Random Forest', 'XGBoost', 'SVM']:
-                smote = SMOTE(random_state=RANDOM_STATE)
-                X_tr, y_tr = smote.fit_resample(X_tr, y_tr)
+                if len(np.unique(y_tr)) > 1:
+                    try:
+                        smote = SMOTE(random_state=RANDOM_STATE)
+                        X_tr, y_tr = smote.fit_resample(X_tr, y_tr)
+                    except ValueError:
+                        pass
 
             # Clonar y entrenar modelo
             if model_name == 'Random Forest':
