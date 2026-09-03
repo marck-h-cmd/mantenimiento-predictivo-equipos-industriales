@@ -2,6 +2,9 @@
 # Configuraciones generales del sistema de Mantenimiento Predictivo
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ============================================================
 # BASE DE DATOS
