@@ -30,8 +30,8 @@ Aplicación web completa desarrollada en Python + Streamlit + PostgreSQL que imp
 
 ### 2. Clonar y configurar
 ```bash
-git clone <repositorio>
-cd mantenimiento_predictivo
+git clone https://github.com/marck-h-cmd/mantenimiento-predictivo-equipos-industriales.git
+cd mantenimiento-predictivo-equipos-industriales
 pip install -r requirements.txt
 ```
 
