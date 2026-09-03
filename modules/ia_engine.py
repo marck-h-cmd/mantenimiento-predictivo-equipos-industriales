@@ -690,20 +690,29 @@ class IAEngine:
     # PERSISTENCIA
     # ============================================================
     def save_best_model(self, model_name, filepath=None):
-        """Guarda el mejor modelo en disco."""
+        """Guarda el modelo especificado en disco en models/ y models/trained_models/."""
         model_info = self.models.get(model_name)
         if not model_info:
             return None
 
+        os.makedirs(MODELS_DIR, exist_ok=True)
+        models_root = os.path.dirname(MODELS_DIR)
+        os.makedirs(models_root, exist_ok=True)
+
+        clean_name = model_name.replace(' ', '_').replace('+', '').replace('-', '_').lower()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"model_{clean_name}_{timestamp}.pkl"
+
         if filepath is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filepath = os.path.join(MODELS_DIR, f"best_model_{model_name.replace(' ', '_')}_{timestamp}.pkl")
+            filepath = os.path.join(MODELS_DIR, filename)
+
+        root_filepath = os.path.join(models_root, filename)
 
         package = {
             'model': model_info['model'],
             'model_name': model_name,
             'type': model_info['type'],
-            'params': model_info['params'],
+            'params': model_info.get('params', {}),
             'feature_cols': self.feature_cols,
             'scaler': self.scaler,
             'results': self.results.get(model_name, {}),
@@ -712,6 +721,13 @@ class IAEngine:
 
         with open(filepath, 'wb') as f:
             pickle.dump(package, f)
+
+        # Copiar también directamente a models/ para fácil acceso
+        import shutil
+        try:
+            shutil.copy2(filepath, root_filepath)
+        except Exception:
+            pass
 
         return filepath
 
@@ -881,7 +897,26 @@ def render_ia_engine():
         best = engine.select_best_model()
 
         progress_bar.progress(100)
-        status.text("¡Entrenamiento completado!")
+        status.text("¡Entrenamiento completado con éxito!")
+
+        # Guardar en sesión de Streamlit para que persista y permita guardar modelos
+        st.session_state['ia_engine'] = engine
+        st.session_state['ia_best'] = best
+        st.session_state['ia_cv_results'] = cv_results
+        st.session_state['ia_cv_strategy'] = cv_strategy
+        st.session_state['ia_mcnemar'] = mcnemar if 'mcnemar' in locals() else None
+        st.session_state['ia_stability'] = stability
+        st.session_state['ia_trained'] = True
+        st.rerun()
+
+    # Si hay un entrenamiento previo en sesión, mostrar los resultados y la sección de guardado
+    if st.session_state.get('ia_trained') and 'ia_engine' in st.session_state:
+        engine = st.session_state['ia_engine']
+        best = st.session_state['ia_best']
+        cv_results = st.session_state.get('ia_cv_results', {})
+        cv_strategy = st.session_state.get('ia_cv_strategy', 'stratified')
+        mcnemar = st.session_state.get('ia_mcnemar')
+        stability = st.session_state.get('ia_stability', {})
 
         # ============================================================
         # RESULTADOS
@@ -945,38 +980,39 @@ def render_ia_engine():
                 st.plotly_chart(fig_cm, use_container_width=True)
 
         # Validación cruzada
-        st.markdown("---")
-        st.header("5. Validación Cruzada")
+        if cv_results:
+            st.markdown("---")
+            st.header("5. Validación Cruzada")
 
-        for model_name, cv_data in cv_results.items():
-            st.subheader(f"{model_name} - {cv_strategy}")
+            for model_name, cv_data in cv_results.items():
+                st.subheader(f"{model_name} - {cv_strategy}")
 
-            folds_df = pd.DataFrame(cv_data['folds'])
-            st.dataframe(folds_df, use_container_width=True, hide_index=True)
+                folds_df = pd.DataFrame(cv_data['folds'])
+                st.dataframe(folds_df, use_container_width=True, hide_index=True)
 
-            # Gráfico de folds
-            fig_folds = px.line(folds_df, x='fold', y=['accuracy', 'precision', 'recall', 'f1'],
-                               title=f"Métricas por Fold - {model_name}", markers=True)
-            fig_folds.update_layout(height=350, template="plotly_white")
-            st.plotly_chart(fig_folds, use_container_width=True)
+                # Gráfico de folds
+                fig_folds = px.line(folds_df, x='fold', y=['accuracy', 'precision', 'recall', 'f1'],
+                                   title=f"Métricas por Fold - {model_name}", markers=True)
+                fig_folds.update_layout(height=350, template="plotly_white")
+                st.plotly_chart(fig_folds, use_container_width=True)
 
-            # Resumen estadístico
-            summary = cv_data['summary']
-            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-            with col_s1:
-                st.metric("F1 Mean ± Std", f"{summary['f1']['mean']:.4f} ± {summary['f1']['std']:.4f}")
-            with col_s2:
-                st.metric("Accuracy Mean", f"{summary['accuracy']['mean']:.4f}")
-            with col_s3:
-                st.metric("Recall Mean", f"{summary['recall']['mean']:.4f}")
-            with col_s4:
-                st.metric("AUC-ROC Mean", f"{summary['auc_roc']['mean']:.4f}")
+                # Resumen estadístico
+                summary = cv_data['summary']
+                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                with col_s1:
+                    st.metric("F1 Mean ± Std", f"{summary['f1']['mean']:.4f} ± {summary['f1']['std']:.4f}")
+                with col_s2:
+                    st.metric("Accuracy Mean", f"{summary['accuracy']['mean']:.4f}")
+                with col_s3:
+                    st.metric("Recall Mean", f"{summary['recall']['mean']:.4f}")
+                with col_s4:
+                    st.metric("AUC-ROC Mean", f"{summary['auc_roc']['mean']:.4f}")
 
         # Pruebas estadísticas
         st.markdown("---")
         st.header("6. Pruebas Estadísticas Robustas")
 
-        if 'mcnemar' in locals():
+        if mcnemar:
             st.subheader("Prueba de McNemar (RF vs XGBoost)")
             col_m1, col_m2, col_m3 = st.columns(3)
             with col_m1:
@@ -1016,25 +1052,49 @@ def render_ia_engine():
 
         # Guardar modelo
         st.markdown("---")
-        st.header("8. Guardar Mejor Modelo")
+        st.header("8. Guardar Modelo en Disco")
 
-        if st.button("💾 Guardar Mejor Modelo en Disco", use_container_width=True):
-            filepath = engine.save_best_model(best['best_model'])
-            st.success(f"Modelo guardado en: {filepath}")
+        col_save_sel, col_save_btn = st.columns([2, 1])
+        with col_save_sel:
+            model_options = list(engine.models.keys())
+            best_idx = model_options.index(best['best_model']) if best and best['best_model'] in model_options else 0
+            selected_model = st.selectbox("Seleccionar modelo a persistir:", model_options, index=best_idx)
+        with col_save_btn:
+            st.write("")
+            st.write("")
+            btn_save = st.button("💾 Guardar Modelo en Disco", use_container_width=True)
 
-            # Guardar en base de datos
-            try:
-                res = engine.results[best['best_model']]
-                db.execute_query("""
-                    INSERT INTO modelos_ml (nombre_modelo, tipo_modelo, algoritmo, version,
-                                           metricas_json, hiperparametros_json, fecha_entrenamiento,
-                                           activo, accuracy, precision_score, recall, f1_score, auc_roc)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW(), TRUE, %s, %s, %s, %s, %s)
-                """, (
-                    best['best_model'], engine.models[best['best_model']]['type'], best['best_model'], '1.0',
-                    json.dumps(best['scores']), json.dumps(engine.models[best['best_model']]['params']),
-                    res['accuracy'], res['precision'], res['recall'], res['f1'], res['auc_roc']
-                ), fetch=False)
-                st.success("Metadatos del modelo guardados en PostgreSQL")
-            except Exception as e:
-                st.warning(f"No se pudo guardar en BD: {e}")
+        if btn_save:
+            filepath = engine.save_best_model(selected_model)
+            if filepath:
+                st.success(f"✅ ¡Modelo **{selected_model}** guardado exitosamente en:\n\n`{filepath}`\n(con copia directa en la carpeta `models/`)")
+
+                # Guardar en base de datos
+                try:
+                    res = engine.results.get(selected_model, {})
+                    model_info = engine.models[selected_model]
+                    db.execute_query("""
+                        INSERT INTO modelos_ml (nombre_modelo, tipo_modelo, algoritmo, version,
+                                               metricas_json, hiperparametros_json, fecha_entrenamiento,
+                                               activo, accuracy, precision_score, recall, f1_score, auc_roc)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW(), TRUE, %s, %s, %s, %s, %s)
+                    """, (
+                        selected_model, model_info.get('type', 'tradicional'), selected_model, '1.0',
+                        json.dumps(res), json.dumps(model_info.get('params', {})),
+                        res.get('accuracy', 0), res.get('precision', 0), res.get('recall', 0), res.get('f1', 0), res.get('auc_roc', 0)
+                    ), fetch=False)
+                    st.success("✅ Metadatos del modelo guardados en PostgreSQL")
+                except Exception as e:
+                    st.warning(f"No se pudo guardar en BD: {e}")
+            else:
+                st.error("No se pudo guardar el modelo.")
+
+    # Mostrar siempre el explorador de modelos guardados en disco
+    st.markdown("---")
+    st.subheader("📁 Modelos Almacenados en la Carpeta `models/`")
+    from modules.utils import list_saved_models
+    saved_models = list_saved_models()
+    if saved_models:
+        st.dataframe(pd.DataFrame(saved_models), use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay modelos .pkl guardados actualmente en la carpeta `models/`.")

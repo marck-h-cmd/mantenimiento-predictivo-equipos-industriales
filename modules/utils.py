@@ -10,20 +10,34 @@ from datetime import datetime, timedelta
 from config.settings import MODELS_DIR, DATA_DIR, REPORTS_DIR
 
 
+import shutil
+
 def save_model(model, model_name: str, metadata: dict = None):
-    """Persiste modelo entrenado en disco."""
+    """Persiste modelo entrenado en disco en models y models/trained_models."""
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    models_root = os.path.dirname(MODELS_DIR)
+    os.makedirs(models_root, exist_ok=True)
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{model_name}_{timestamp}.pkl"
+    clean_name = model_name.replace(' ', '_').replace('+', '').replace('-', '_').lower()
+    filename = f"{clean_name}_{timestamp}.pkl"
     filepath = os.path.join(MODELS_DIR, filename)
+    root_filepath = os.path.join(models_root, filename)
 
     package = {
         'model': model,
+        'model_name': model_name,
         'metadata': metadata or {},
         'saved_at': datetime.now().isoformat()
     }
 
     with open(filepath, 'wb') as f:
         pickle.dump(package, f)
+
+    try:
+        shutil.copy2(filepath, root_filepath)
+    except Exception:
+        pass
 
     return filepath
 
@@ -32,14 +46,30 @@ def load_model(filepath: str):
     """Carga modelo persistido desde disco."""
     with open(filepath, 'rb') as f:
         package = pickle.load(f)
-    return package['model'], package.get('metadata', {})
+    return package.get('model'), package.get('metadata', {})
 
 
 def list_saved_models():
-    """Lista modelos guardados en el directorio."""
-    if not os.path.exists(MODELS_DIR):
-        return []
-    return [f for f in os.listdir(MODELS_DIR) if f.endswith('.pkl')]
+    """Lista modelos guardados en la carpeta models y models/trained_models."""
+    results = []
+    seen = set()
+    dirs_to_check = [MODELS_DIR, os.path.dirname(MODELS_DIR)]
+    
+    for d in dirs_to_check:
+        if os.path.exists(d):
+            for f in os.listdir(d):
+                if f.endswith('.pkl') or f.endswith('.keras'):
+                    if f not in seen:
+                        seen.add(f)
+                        full_p = os.path.join(d, f)
+                        if os.path.isfile(full_p):
+                            results.append({
+                                'Archivo': f,
+                                'Carpeta': os.path.basename(d) if os.path.basename(d) else 'models',
+                                'Tamaño (KB)': round(os.path.getsize(full_p) / 1024, 2),
+                                'Fecha Modificación': datetime.fromtimestamp(os.path.getmtime(full_p)).strftime("%Y-%m-%d %H:%M:%S")
+                            })
+    return results
 
 
 def generate_synthetic_sensor_data(n_samples: int = 5000, n_equipos: int = 6, 
