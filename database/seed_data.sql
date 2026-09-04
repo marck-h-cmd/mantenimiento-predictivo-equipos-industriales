@@ -58,10 +58,10 @@ INSERT INTO rol_permiso (id_rol, id_permiso) VALUES
 -- Insertar usuarios (contraseñas hasheadas con bcrypt - 'password123')
 -- hash generado con bcrypt.hashpw(b'password123', bcrypt.gensalt())
 INSERT INTO usuarios (username, email, password_hash, nombre_completo, id_rol) VALUES
-('admin', 'admin@untrujillo.edu.pe', '$2b$12$abcdefghijklmnopqrstuvwx1234567890abcdefgh', 'Administrador del Sistema', 1),
-('ingeniero1', 'ingeniero@untrujillo.edu.pe', '$2b$12$abcdefghijklmnopqrstuvwx1234567890abcdefgh', 'Ing. Carlos Mendoza', 2),
-('operador1', 'operador@untrujillo.edu.pe', '$2b$12$abcdefghijklmnopqrstuvwx1234567890abcdefgh', 'Operador Juan Pérez', 3),
-('analista1', 'analista@untrujillo.edu.pe', '$2b$12$abcdefghijklmnopqrstuvwx1234567890abcdefgh', 'Analista María López', 4);
+('admin', 'admin@untrujillo.edu.pe', '$2b$12$ZNRMuSewjPAC0DE0Xcmby.o1J92LIC03AmqcVlw7WwClOCSe1TT5u', 'Administrador del Sistema', 1),
+('ingeniero1', 'ingeniero@untrujillo.edu.pe', '$2b$12$ZNRMuSewjPAC0DE0Xcmby.o1J92LIC03AmqcVlw7WwClOCSe1TT5u', 'Ing. Carlos Mendoza', 2),
+('operador1', 'operador@untrujillo.edu.pe', '$2b$12$ZNRMuSewjPAC0DE0Xcmby.o1J92LIC03AmqcVlw7WwClOCSe1TT5u', 'Operador Juan Pérez', 3),
+('analista1', 'analista@untrujillo.edu.pe', '$2b$12$ZNRMuSewjPAC0DE0Xcmby.o1J92LIC03AmqcVlw7WwClOCSe1TT5u', 'Analista María López', 4);
 
 -- Insertar equipos
 INSERT INTO equipos (codigo_equipo, nombre_equipo, tipo_equipo, marca, modelo, anio_fabricacion, horas_operacion_total, estado_operativo, ubicacion) VALUES
